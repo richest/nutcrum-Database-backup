@@ -1,7 +1,7 @@
 name: Backup and Upload MySQL Databases
 on:
   schedule:
-   - cron: '30 3 * * *'    #- cron: '30 3  *'  # Runs daily at 9:00 AM IST #- cron: '30 3  *' 
+   - cron: '30 3 * * *'    #- cron: '30 3  *'  # Runs daily at 9:00 AM IST 
   workflow_dispatch:
 jobs:
   backup-and-upload:
