@@ -1,8 +1,8 @@
-name: Backup and Upload MySQL Databases
+name: Backup and Upload MySQL Databases to S3
 
 on:
   schedule:
-    - cron: '*/30 * * * *' 
+    - cron: '*/30 * * * *'  # every 30 minutes
   workflow_dispatch:
 
 jobs:
@@ -16,10 +16,17 @@ jobs:
       S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
 
     steps:
-      - name: Set up MySQL client and AWS CLI
+      - name: Set up MySQL client, unzip, and curl
         run: |
           sudo apt-get update
-          sudo apt-get install -y mysql-client awscli
+          sudo apt-get install -y mysql-client unzip curl
+
+      - name: Install AWS CLI v2
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          sudo ./aws/install
+          aws --version
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -28,7 +35,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Dump all databases individually
+      - name: Dump all MySQL databases individually
         run: |
           mkdir -p dumps
           DBS=$(mysql -h $MYSQL_HOST -u $MYSQL_USER -p$MYSQL_PASSWORD -e "SHOW DATABASES;" | grep -Ev "(Database|information_schema|performance_schema|mysql|sys)")
@@ -48,9 +55,12 @@ jobs:
         run: |
           aws s3 cp "$TAR_NAME" "s3://$S3_BUCKET_NAME/$TAR_NAME"
 
-      - name: (Optional) Delete backups older than 2 days from S3
+      - name: Delete backups older than 2 days from S3
         run: |
-          aws s3api list-objects-v2 --bucket $S3_BUCKET_NAME --query "Contents[?LastModified<='$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ')'].Key" --output text | tr '\t' '\n' | while read key; do
+          TWO_DAYS_AGO=$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          aws s3api list-objects-v2 --bucket $S3_BUCKET_NAME \
+            --query "Contents[?LastModified<='$TWO_DAYS_AGO'].Key" --output text |
+          tr '\t' '\n' | while read key; do
             echo "Deleting $key"
             aws s3 rm "s3://$S3_BUCKET_NAME/$key"
           done
