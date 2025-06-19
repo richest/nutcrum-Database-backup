@@ -2,7 +2,7 @@ name: Backup and Upload MySQL Databases to S3
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/30 * * * *'  # Every 30 minutes
   workflow_dispatch:
 
 jobs:
@@ -48,12 +48,19 @@ jobs:
         run: |
           aws s3 cp "$TAR_NAME" "s3://$S3_BUCKET_NAME/$TAR_NAME"
 
+      - name: Delete local backup files after upload
+        run: |
+          rm -rf "$TAR_NAME" dumps/
+          echo "Local backup files deleted."
+
       - name: Delete backups older than 2 days from S3
         run: |
           TWO_DAYS_AGO=$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)
           aws s3api list-objects-v2 --bucket $S3_BUCKET_NAME \
             --query "Contents[?LastModified<='$TWO_DAYS_AGO'].Key" --output text |
           tr '\t' '\n' | while read key; do
-            echo "Deleting $key"
-            aws s3 rm "s3://$S3_BUCKET_NAME/$key"
+            if [ ! -z "$key" ]; then
+              echo "Deleting $key"
+              aws s3 rm "s3://$S3_BUCKET_NAME/$key"
+            fi
           done
